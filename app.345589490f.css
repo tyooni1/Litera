@@ -15,6 +15,7 @@ body{background:radial-gradient(ellipse at 50% 42%,#3a3b38 0%,#2a2b29 46%,#1d1e1
 .face{position:absolute;top:0;left:0;height:100%;backface-visibility:hidden;-webkit-backface-visibility:hidden;background-repeat:no-repeat;overflow:hidden}
 .face.b{transform:rotateY(180deg)}
 .face i{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none}
+.leaf.bd .face.gut::after{display:none}
 .face.gut::after{content:"";position:absolute;top:0;bottom:0;width:var(--gw);pointer-events:none}
 .face.f.gut::after{left:0;background:linear-gradient(to right,rgba(0,0,0,.22),rgba(0,0,0,.07) 30%,rgba(0,0,0,0) 72%)}
 .face.b.gut::after{right:0;background:linear-gradient(to left,rgba(0,0,0,.22),rgba(0,0,0,.07) 30%,rgba(0,0,0,0) 72%)}

@@ -19,10 +19,10 @@ try{ CFG=window.LITERA_CFG||JSON.parse($('cfg').textContent); }catch(e){ fail('E
 const WEB=CFG.mode==='web';
 try{
 
-const N=CFG.N, NS=8, BLANK=new Set(CFG.blank), PAGES=CFG.pages||232;
+const N=CFG.N, NC=4, NS=NC+8, BLANK=new Set(CFG.blank), PAGES=CFG.pages||232;
 const RM=!!(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches);
 const stage=$('stage'), scene=$('scene'), book=$('book');
-let W=0,H=0,D=0,T=0,SW=0;
+let W=0,H=0,D=0,T=0,SWS=[],SXS=[];   // strip widths and positions: four narrow strips at the spine (the curve into the binding), eight for the rest
 let s=0;                 // leaves turned to the left (the spread in view)
 let fl=null;             // the leaf in motion: {i, dir, p, to}
 let busy=false, raf=0;
@@ -109,7 +109,10 @@ function fitH(){                          // small screens keep less room around
 }
 function layout(){
   H=fitH();
-  W=H*CFG.PW/CFG.PH; D=H*CFG.SPINE/CFG.PH/N; T=N*D; SW=W/NS; book.style.setProperty('--gw',(W*0.13)+'px');
+  W=H*CFG.PW/CFG.PH; D=H*CFG.SPINE/CFG.PH/N; T=N*D; book.style.setProperty('--gw',(W*0.13)+'px');
+  const c=W*0.12; SWS=[0.16,0.21,0.28,0.35].map(f=>c*f); for(let k=NC;k<NS;k++) SWS.push((W-c)/(NS-NC));
+  SXS=[]; let x=0; for(const w of SWS){ SXS.push(x); x+=w; }
+  curves.clear();
   for(const [,L] of leaves){ L.el.remove(); } leaves.clear();
   const fore=texURL('fore');
   Object.assign($('foreR').style,{top:-H/2+'px',height:H+'px',left:W+'px',transformOrigin:'0 50%',transform:'rotateY(-90deg)',backgroundImage:fore,backgroundSize:(N*D)+'px '+H+'px'});
@@ -122,7 +125,8 @@ function layout(){
   Object.assign($('shR').style,{left:'0px',top:-H/2+'px',width:W+'px',height:H+'px'});
   render(); setScene(false); Assets.retune();
 }
-// one leaf = 8 vertical strips, each hinged on the one before it (so the leaf can bend while it turns)
+// one leaf = 12 vertical strips, each hinged on the one before it: the leaf bends while it turns, and, when the open book
+// is seen at an angle, its first four strips curve down into the binding, the way a bound book lies open
 function paint(d){
   const f=d._f; d.querySelectorAll('u').forEach(x=>x.remove());
   if(BLANK.has(f)){ d.style.background=CFG.paper; return; }
@@ -132,15 +136,15 @@ function paint(d){
   if(!u&&d._k===0){                          // a page that could not be read: say so on the page, not with a broken picture
     const m=document.createElement('u'); const pn=facePage(f);
     m.style.width=W+'px'; m.textContent=(pn?pn+'쪽을':'이 쪽을')+' 불러오지 못했습니다';
-    if(d._back&&d.parentNode&&d.style.width!==W+'px') m.style.left=-(W-SW)+'px';
+    if(d._back&&d.parentNode&&d.style.width!==W+'px') m.style.left=-(W-SWS[0])+'px';
     d.appendChild(m);
   }
 }
 function makeFace(f,k,back){
   const d=document.createElement('div'); d.className='face '+(back?'b':'f');
-  d.style.width=(SW+1)+'px'; d._k=k; d._back=back; d._f=f;
+  d.style.width=(SWS[k]+OV)+'px'; d._k=k; d._back=back; d._f=f;
   if(k===0&&!(f===0||f===2*N-1)) d.classList.add('gut');
-  d._bp=(back? -(W-(k+1)*SW) : -k*SW)+'px 0'; d.style.backgroundPosition=d._bp;
+  d._bp=(back? -(W-SXS[k]-SWS[k]) : -SXS[k])+'px 0'; d.style.backgroundPosition=d._bp;
   paint(d);
   const sh=document.createElement('i'); d.appendChild(sh); d._sh=sh; return d;
 }
@@ -149,38 +153,73 @@ function makeLeaf(i){
   el.style.width=W+'px'; el.style.height=H+'px'; el.style.top=(-H/2)+'px';
   let parent=el; const st=[];
   for(let k=0;k<NS;k++){
-    const s_=document.createElement('div'); s_.className='strip'; s_.style.width=SW+'px'; s_.style.height=H+'px'; s_.style.left=(k?SW:0)+'px';
+    const s_=document.createElement('div'); s_.className='strip'; s_.style.width=SWS[k]+'px'; s_.style.height=H+'px'; s_.style.left=(k?SWS[k-1]:0)+'px';
     const f=makeFace(2*i,k,false), b=makeFace(2*i+1,k,true); s_.append(f,b); parent.appendChild(s_); parent=s_; st.push({el:s_,f,b});
   }
-  const cf=document.createElement('div'); cf.className='cast f'; const cb=document.createElement('div'); cb.className='cast b';
-  for(const c of [cf,cb]){ c.style.width=W+'px'; c.style.height=H+'px'; }
-  st[0].el.append(cf,cb);
-  const L={i,el,st,cf,cb,live:true}; setMode(L,false); return L;
+  // the shadow of a turning leaf on the page under it: on the whole page when the page lies flat, on its flat part when it curves
+  const cast=(host,w)=>{ const f=document.createElement('div'), b=document.createElement('div'); f.className='cast f'; b.className='cast b';
+    for(const c of [f,b]){ c.style.width=w+'px'; c.style.height=H+'px'; } host.append(f,b); return [f,b]; };
+  const [cf,cb]=cast(st[0].el,W), [cf2,cb2]=cast(st[NC].el,W-SXS[NC]);
+  const L={i,el,st,cf,cb,cf2,cb2,live:true}; setMode(L,false); return L;
 }
-function setMode(L,live){                 // resting leaves are one piece (no seams); a turning leaf is eight strips
+function setMode(L,live){                 // resting flat leaves are one piece (no seams); a turning or curving leaf is twelve strips
   if(L.live===live) return; L.live=live; L.el.style.willChange=live?'transform':'';   // a layer of its own only while it moves
   L.st.forEach((S,k)=>{
-    if(k===0){ for(const f of [S.f,S.b]){ f.style.width=(live?SW+1:W)+'px'; f.style.backgroundPosition=live?f._bp:'0 0';
-      const m=f.querySelector('u'); if(m) m.style.left=(f._back&&live)?-(W-SW)+'px':'0'; } }
+    if(k===0){ for(const f of [S.f,S.b]){ f.style.width=(live?SWS[0]+OV:W)+'px'; f.style.backgroundPosition=live?f._bp:'0 0';
+      const m=f.querySelector('u'); if(m) m.style.left=(f._back&&live)?-(W-SWS[0])+'px':'0'; } }
     else { S.f.style.display=S.b.style.display=live?'':'none'; }
   });
 }
-function pose(L,p,dir,live){
-  setMode(L,live);
-  const i=L.i, hR=(N-i)*D, hL=(i+1)*D;
-  const h=hR+(hL-hR)*p+(live?Math.sin(Math.PI*p)*H*0.015:0);
-  L.el.style.transform='translateZ('+h.toFixed(2)+'px)';
-  const stiff=(i===0||i===N-1)?0.25:1;
-  const B=live?46*stiff*Math.sin(Math.PI*p):0;
+// the curve into the binding: strip j of the first four rises at Φ·CA[j]; Φ is found so that the curve climbs exactly `rise`
+const CA=[1,0.78,0.5,0.2], curves=new Map(), OV=2;   // OV: each strip reaches 2px under the next, so no hairline shows between them
+function curve(rise){
+  if(!(rise>0.05)) return null;
+  const key=Math.round(rise*8); if(curves.has(key)) return curves.get(key);
+  const R=key/8, up=P=>{ let y=0; for(let j=0;j<NC;j++) y+=SWS[j]*Math.sin(P*CA[j]); return y; };
+  let lo=0, hi=Math.PI/2*0.97;
+  if(up(hi)<=R) lo=hi; else for(let it=0;it<24;it++){ const m=(lo+hi)/2; if(up(m)<R) lo=m; else hi=m; }
+  const ph=[], pts=[]; let x=0, y=0;
+  for(let j=0;j<NC;j++){ const a=lo*CA[j]; ph.push(a*180/Math.PI); x+=SWS[j]*Math.cos(a); y+=SWS[j]*Math.sin(a); pts.push([x,y]); }
+  const c={ph,pts,dx:SXS[NC]-x,rise:y}; if(curves.size>400) curves.clear(); curves.set(key,c); return c;
+}
+function opened(){                         // 0 closed … 1 open; the curve shows only when the book is seen at an angle
+  if(!view3d) return 0;
+  if(fl&&fl.i===0) return fl.p; if(fl&&fl.i===N-1) return 1-fl.p;
+  return (s>0&&s<N)?1:0;
+}
+const smooth=t=>{ t=Math.max(0,Math.min(1,t)); return t*t*(3-2*t); };
+const OCC=[0.16,0.085,0.04,0.012,0];      // the shade deep in the gutter, at the strip edges from the spine out
+function shade(el,a,b){                    // a strip is shaded with a gradient between its two edges, so the curve shows no bands
+  const v=(a<0.004&&b<0.004)?'':'linear-gradient(to right,rgba(0,0,0,'+a.toFixed(3)+'),rgba(0,0,0,'+b.toFixed(3)+'))';
+  if(el._v!==v){ el._v=v; el.style.background=v||'transparent'; el.style.opacity=v?'1':'0'; }
+}
+const TH=new Float64Array(16), FD=new Float64Array(17), BD=new Float64Array(17);
+function pose(L,p,dir,turning){
+  const i=L.i, cover=(i===0||i===N-1), O=opened(), zb=D;
+  const hR=(N-i)*D, hL=(i+1)*D, bound=O>0&&!cover;
+  const live=turning||bound; setMode(L,live); L.el.classList.toggle('bd',bound);
+  const wR=turning?1-smooth(p/0.3):(p<0.5?1:0), wL=turning?smooth((p-0.7)/0.3):(p<0.5?0:1);
+  const cR=bound?curve(O*(hR-zb)*wR):null, cL=bound?curve(O*(hL-zb)*wL):null;
+  let z;
+  if(!bound) z=hR+(hL-hR)*p+(turning?Math.sin(Math.PI*p)*H*0.015:0);
+  else if(turning) z=zb+(1-O)*(hR+(hL-hR)*p-zb);
+  else z=p<0.5?hR-(cR?cR.rise:0):hL-(cL?cL.rise:0);
+  L.el.style.transform='translateZ('+z.toFixed(2)+'px)';
+  const stiff=cover?0.25:1;
+  const B=turning?46*stiff*Math.sin(Math.PI*p):0;
   let prev=0;
   for(let k=0;k<NS;k++){
-    let th=180*p+dir*B*(k/(NS-1)-0.5); th=Math.max(0,Math.min(180,th));
-    const S=L.st[k]; S.el.style.transform='rotateY('+(-(th-prev)).toFixed(3)+'deg)'; prev=th;
-    if(live){ const c=Math.cos(th*Math.PI/180);
-      S.f._sh.style.opacity=th<90?(0.42*(1-c)).toFixed(3):'0';
-      S.b._sh.style.opacity=th>90?(0.30*(1+c)).toFixed(3):'0'; }
-    else { S.f._sh.style.opacity='0'; S.b._sh.style.opacity='0'; }
+    let th=180*p+dir*B*((SXS[k]+SWS[k]/2)/W-0.5);
+    if(k<NC){ if(cR) th+=cR.ph[k]; if(cL) th-=cL.ph[k]; }
+    th=Math.max(0,Math.min(180,th)); TH[k]=th;
+    L.st[k].el.style.transform='rotateY('+(-(th-prev)).toFixed(3)+'deg)'; prev=th;
   }
+  if(!live){ for(const S of L.st){ shade(S.f._sh,0,0); shade(S.b._sh,0,0); } return; }
+  for(let e=0;e<=NS;e++){                  // darkness at each strip edge: from the angle of the paper, and from the gutter
+    const th=e===0?TH[0]:e===NS?TH[NS-1]:(TH[e-1]+TH[e])/2, c=Math.cos(th*Math.PI/180), g=bound&&e<=NC?OCC[e]*O:0;
+    FD[e]=th<90?0.36*(1-c)+g*wR:0; BD[e]=th>90?0.30*(1+c)+g*wL:0;
+  }
+  for(let k=0;k<NS;k++){ const S=L.st[k]; shade(S.f._sh,FD[k],FD[k+1]); shade(S.b._sh,BD[k+1],BD[k]); }
 }
 function visible(){
   const v=new Set([0,N-1]); for(const i of [s-2,s-1,s,s+1]) if(i>=0&&i<N) v.add(i);
@@ -188,31 +227,43 @@ function visible(){
   return v;
 }
 function render(){                         // the 3D book only; the page label, slider and contents are updated when a spread is settled
-  const v=visible();
+  const v=visible(), O=opened();
   for(const [i,L] of leaves) if(!v.has(i)){ L.el.remove(); leaves.delete(i); }
   for(const i of v){
     let L=leaves.get(i); if(!L){ L=makeLeaf(i); leaves.set(i,L); book.appendChild(L.el); }
     if(fl&&fl.i===i) pose(L,fl.p,fl.dir,true); else pose(L,i<s?1:0,1,false);
-    L.cf.style.opacity='0'; L.cb.style.opacity='0';
+    // curved leaves under the top ones would meet them at the binding: at rest only the top leaves (and the covers) are drawn
+    L.el.style.visibility=(O>0&&!fl&&i!==s-1&&i!==s&&i!==0&&i!==N-1)?'hidden':'';
+    L.cf.style.opacity=L.cb.style.opacity=L.cf2.style.opacity=L.cb2.style.opacity='0';
   }
   if(fl){ const a=Math.sin(Math.PI*fl.p)*0.5, R=leaves.get(fl.i+1), Lf=leaves.get(fl.i-1);
-    if(R) R.cf.style.opacity=(a*(1-fl.p)*1.4).toFixed(3); if(Lf) Lf.cb.style.opacity=(a*fl.p*1.4).toFixed(3); }
-  edges(); shift();
+    if(R) (R.live&&O>0?R.cf2:R.cf).style.opacity=(a*(1-fl.p)*1.4).toFixed(3);
+    if(Lf) (Lf.live&&O>0?Lf.cb2:Lf.cb).style.opacity=(a*fl.p*1.4).toFixed(3); }
+  edges(O); shift();
 }
-function edges(){
+// the page block seen from the side: at the head and tail it narrows into the binding along the same curve as the top leaf,
+// and its fore-edge leans in a little (a curved leaf reaches less far)
+function edges(O){
   const rc=N-(fl?fl.i+1:s), lc=fl?fl.i:s;
+  const cvR=O>0&&rc>1?curve(O*(rc-1)*D):null, cvL=O>0&&lc>1?curve(O*(lc-1)*D):null;
   const fr=$('foreR'), fL=$('foreL');
   fr.style.display=rc>0?'block':'none'; fr.style.width=(rc*D)+'px'; fr.style.backgroundPosition='0 0';
+  fr.style.transform='rotateY('+(-90-(cvR?Math.asin(Math.min(1,cvR.dx/(rc*D)))*180/Math.PI:0)).toFixed(3)+'deg)';
   fL.style.display=lc>0?'block':'none'; fL.style.width=(lc*D)+'px'; fL.style.left=(-W-lc*D)+'px'; fL.style.backgroundPosition=((lc-N)*D)+'px 0';
-  for(const [id,c,top] of [['headR',rc,true],['tailR',rc,false],['headL',lc,true],['tailL',lc,false]]){
-    const e=$(id); e.style.display=c>0?'block':'none'; e.style.height=(c*D)+'px';
-    e.style.top=top?(-H/2)+'px':(H/2-c*D)+'px';
+  fL.style.transform='rotateY('+(90+(cvL?Math.asin(Math.min(1,cvL.dx/(lc*D)))*180/Math.PI:0)).toFixed(3)+'deg)';
+  for(const [id,c,top,cv,left] of [['headR',rc,true,cvR,false],['tailR',rc,false,cvR,false],['headL',lc,true,cvL,true],['tailL',lc,false,cvL,true]]){
+    const e=$(id), hgt=c*D; e.style.display=c>0?'block':'none'; e.style.height=hgt+'px';
+    e.style.top=top?(-H/2)+'px':(H/2-hgt)+'px';
     e.style.backgroundPosition='0 '+(top?0:-(N-c)*D)+'px';
+    if(!cv){ e.style.clipPath='none'; continue; }
+    const base=hgt-cv.rise, P=[[0,0],[0,base]].concat(cv.pts.map(([x,y])=>[x,base+y]),[[W-cv.dx,hgt],[W,0]]);
+    e.style.clipPath='polygon('+P.map(([x,z])=>(left?W-x:x).toFixed(2)+'px '+(top?z:hgt-z).toFixed(2)+'px').join(',')+')';
   }
   const sp=$('spine'); const closed=!fl&&(s===0||s===N);
   sp.style.display=closed?'block':'none';
   if(closed){ const k=s===0?'spine':'spineM'; if(sp._k!==k){ sp._k=k; sp.style.backgroundImage=texURL(k); } }
-  $('shL').style.display=(lc>0||fl)?'block':'none'; $('shR').style.display=(rc>0||fl)?'block':'none';
+  const shO=(c,cov)=>c>0?1:(fl&&fl.i===cov?smooth(((cov===0?fl.p:1-fl.p)-0.55)/0.45):0);   // no shadow where no pages lie yet
+  for(const [id,o] of [['shL',shO(lc,0)],['shR',shO(rc,N-1)]]){ const e=$(id); e.style.display=o>0?'block':'none'; e.style.opacity=o.toFixed(3); }
 }
 function tx(){
   if(fl&&fl.i===0) return -W/2*(1-fl.p);
@@ -323,7 +374,7 @@ function setScene(animate){
   $('b3d').classList.toggle('on',view3d); $('b3dt').textContent=view3d?'입체':'정면';
   $('bzo').disabled=zoom<=1;
 }
-function setView(v3){ view3d=v3; if(!v3){ rx=38; rz=-12; } setScene(true); }
+function setView(v3){ view3d=v3; if(!v3){ rx=38; rz=-12; } setScene(true); render(); }
 let retuneT=0;
 function setZoom(z,cx,cy,animate){
   z=Math.max(1,Math.min(4,z)); const r=stage.getBoundingClientRect();
@@ -380,7 +431,7 @@ stage.addEventListener('pointermove',e=>{
   if(!drag.moved&&Math.hypot(dx,dy)<6) return;
   if(!drag.moved){ drag.moved=true;
     if(drag.kind==='flip'){ if(busy){ drag.kind='orbit'; } else { busy=true; cancelAnimationFrame(raf); fl=drag.side==='R'?{i:s,dir:1,p:0}:{i:s-1,dir:-1,p:1}; } }
-    if(drag.kind==='orbit'&&!view3d){ view3d=true; autoView=false; rx=0; rz=0; drag.rx0=0; drag.rz0=0; } }
+    if(drag.kind==='orbit'&&!view3d){ view3d=true; autoView=false; rx=0; rz=0; drag.rx0=0; drag.rz0=0; render(); } }
   if(drag.kind==='flip'){
     let p=fl.p; for(let it=0;it<3;it++){ const c=Math.max(-1,Math.min(1,(e.clientX-spineX(p))/(drag.a*W))); p=Math.acos(c)/Math.PI; }
     fl.p=p; render();
