@@ -1,5 +1,5 @@
 LITERA No. 1 웹판
-만든 날 2026-11-27 · 판 번호 4d705a4bb2
+만든 날 2026-11-27 · 판 번호 b446bf2b34
 주소 https://tyooni1.github.io/Litera/
 
 1. 이 폴더
