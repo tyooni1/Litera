@@ -488,6 +488,7 @@ function showPiece(){
     else if(k==='h') add('h3','',txt); else if(k==='q') add('p','q',txt);
     else if(k==='n') add('p',/^주$|^각주$/.test(txt)?'nh':'n',txt); else if(k==='r') add('p','r',txt);
     else if(k==='xh') add('h4','xh',txt); else if(k==='x') add('p','x',txt);
+    else if(k==='sh') add('p','qsrc',txt); else if(k==='sq') add('p','sq',txt); else if(k==='rh') add('p','nh',txt);
     else add('p','',txt);
   }
   add('p','pp',(p.end>p.start?p.start+'~'+p.end+'쪽':p.start+'쪽')+' · '+(ri+1)+' / '+TEXT.length);
