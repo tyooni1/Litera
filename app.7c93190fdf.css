@@ -90,6 +90,8 @@ body.idle #bar{opacity:0;pointer-events:none}
 #read article h3{font-size:1.06em;margin:1.6em 0 .6em;color:#bcd3c5}
 #read article .q{font-weight:700;color:#d9e6dd;margin-top:1.4em}
 #read article .n,#read article .r{font-size:.82em;color:#a9a7a0;line-height:1.65;margin:0 0 .45em}
+#read article .xh{font-size:.9em;margin:2em 0 .5em;padding-top:.8em;border-top:1px solid rgba(188,211,197,.25);color:#bcd3c5}
+#read article .x{font-size:.9em;color:#cfccc4;line-height:1.7;margin:0 0 .4em}
 #read article .nh{font-size:.82em;color:#bcd3c5;margin:1.8em 0 .5em;font-weight:700}
 #read .pp{color:var(--dim);font-size:.8em;margin-top:2em}
 #read nav{display:flex;gap:8px;justify-content:space-between;max-width:680px;margin:0 auto;padding:0 22px 40px}
